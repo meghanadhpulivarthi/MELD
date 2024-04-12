@@ -119,7 +119,7 @@ class Dataloader:
         key = list(self.train_data.keys())[0]
         pad = [0]*len(self.train_data[key][0])
 
-        def get_emb(dialogue_id, video_emb):
+        def get_emb(dialogue_id, local_data):
             dialogue_text = []
             for vid in dialogue_id.keys():
                 local_text = []
@@ -135,8 +135,8 @@ class Dataloader:
         self.test_dialogue_features = get_emb(self.test_dialogue_ids, self.test_data)
 
     def get_dialogue_video_embs(self):
-        key = list(self.train_audio_emb.keys())[0]
-        pad = [0]*len(self.train_audio_emb[key])
+        key = list(self.train_video_emb.keys())[0]
+        pad = [0]*len(self.train_video_emb[key])
 
         def get_emb(dialogue_id, video_emb):
             dialogue_video=[]
@@ -153,9 +153,9 @@ class Dataloader:
                 dialogue_video.append(local_video[:self.max_utts])
             return np.array(dialogue_video)
 
-        self.train_dialogue_features = get_emb(self.train_dialogue_ids, self.train_audio_emb)
-        self.val_dialogue_features = get_emb(self.val_dialogue_ids, self.val_audio_emb)
-        self.test_dialogue_features = get_emb(self.test_dialogue_ids, self.test_audio_emb)
+        self.train_dialogue_features = get_emb(self.train_dialogue_ids, self.train_video_emb)
+        self.val_dialogue_features = get_emb(self.val_dialogue_ids, self.val_video_emb)
+        self.test_dialogue_features = get_emb(self.test_dialogue_ids, self.test_video_emb)
 
 
     def get_dialogue_labels(self):
@@ -203,6 +203,7 @@ class Dataloader:
 
         AUDIO_PATH = "./data/pickles/audio_embeddings_feature_selection_{}.pkl".format(self.MODE.lower())
         self.train_audio_emb, self.val_audio_emb, self.test_audio_emb = pickle.load(open(AUDIO_PATH,"rb"))
+
         
         self.get_dialogue_audio_embs()
         self.get_dialogue_lengths()
@@ -218,9 +219,29 @@ class Dataloader:
 
     def load_video_data(self, ):
 
-        VIDEO_PATH ="./data/pickles/embedding.p"
-        self.train_video_emb, self.val_video_emb, self.test_video_emb = pickle.load(open(VIDEO_PATH,"rb"))
+        TRAIN_VIDEO_PATH ="./data/pickles/train.pkl"
+        VAL_VIDEO_PATH ="./data/pickles/dev.pkl"
+        TEST_VIDEO_PATH ="./data/pickles/test.pkl"
+
+        train_audio_video_emb = pickle.load(open(TRAIN_VIDEO_PATH, "rb"))
+        val_audio_video_emb = pickle.load(open(VAL_VIDEO_PATH,"rb"))
+        test_audio_video_emb = pickle.load(open(TEST_VIDEO_PATH, "rb"))
         
+        self.train_video_emb = pd.DataFrame(train_audio_video_emb).loc["video_features"].apply(np.ravel).apply(lambda arr: np.pad(arr, pad_width=(0, 180224-arr.shape[0]))).to_dict()
+        self.val_video_emb = pd.DataFrame(val_audio_video_emb).loc["video_features"].apply(np.ravel).apply(lambda arr: np.pad(arr, pad_width=(0, 180224-arr.shape[0]))).to_dict()
+        self.test_video_emb = pd.DataFrame(test_audio_video_emb).loc["video_features"].apply(np.ravel).apply(lambda arr: np.pad(arr, pad_width=(0, 180224-arr.shape[0]))).to_dict()
+
+
+        self.train_dialogue_ids = self.get_dialogue_ids(self.train_video_emb.keys())
+        self.val_dialogue_ids = self.get_dialogue_ids(self.val_video_emb.keys())
+        self.test_dialogue_ids = self.get_dialogue_ids(self.test_video_emb.keys())
+
+
+        # self.train_video_emb = pd.DataFrame(train_audio_video_emb).loc["video_features"].apply(np.ravel).to_dict()
+        # self.val_video_emb = pd.DataFrame(val_audio_video_emb).loc["video_features"].apply(np.ravel).to_dict()
+        # self.test_video_emb = pd.DataFrame(test_audio_video_emb).loc["video_features"].apply(np.ravel).to_dict()        
+
+
         self.get_dialogue_video_embs()
         self.get_dialogue_lengths()
         self.get_dialogue_labels()
@@ -231,12 +252,27 @@ class Dataloader:
         
         TEXT_UNIMODAL = "./data/pickles/text_{}.pkl".format(self.MODE.lower())
         AUDIO_UNIMODAL = "./data/pickles/audio_{}.pkl".format(self.MODE.lower())
-        VIDEO_UNIMODAL = "./data/pickles/embedding.p"
+        
+        TRAIN_VIDEO_PATH ="./data/pickles/train.pkl"
+        VAL_VIDEO_PATH ="./data/pickles/dev.pkl"
+        TEST_VIDEO_PATH ="./data/pickles/test.pkl"
+
+        train_audio_video_emb = pickle.load(open(TRAIN_VIDEO_PATH, "rb"))
+        val_audio_video_emb = pickle.load(open(VAL_VIDEO_PATH,"rb"))
+        test_audio_video_emb = pickle.load(open(TEST_VIDEO_PATH, "rb"))
+        
+        self.train_video_emb = pd.DataFrame(train_audio_video_emb).loc["video_features"].apply(np.ravel).apply(lambda arr: np.pad(arr, pad_width=(0, 180224-arr.shape[0]))).to_dict()
+        self.val_video_emb = pd.DataFrame(val_audio_video_emb).loc["video_features"].apply(np.ravel).apply(lambda arr: np.pad(arr, pad_width=(0, 180224-arr.shape[0]))).to_dict()
+        self.test_video_emb = pd.DataFrame(test_audio_video_emb).loc["video_features"].apply(np.ravel).apply(lambda arr: np.pad(arr, pad_width=(0, 180224-arr.shape[0]))).to_dict()
+
+
+        self.train_dialogue_ids = self.get_dialogue_ids(self.train_video_emb.keys())
+        self.val_dialogue_ids = self.get_dialogue_ids(self.val_video_emb.keys())
+        self.test_dialogue_ids = self.get_dialogue_ids(self.test_video_emb.keys())
 
         #Load features
         train_text_x, val_text_x, test_text_x = pickle.load(open(TEXT_UNIMODAL, "rb"), encoding='latin1')
         train_audio_x, val_audio_x, test_audio_x = pickle.load(open(AUDIO_UNIMODAL, "rb"), encoding='latin1')
-        train_video_x, val_video_x, test_video_x = pickle.load(open(VIDEO_UNIMODAL, "rb"), encoding='latin1')
 
         def concatenate_fusion(ID, text, audio, video):
             trimodal=[]

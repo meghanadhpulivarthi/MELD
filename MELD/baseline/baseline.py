@@ -36,12 +36,17 @@ class bc_LSTM:
 			self.data.load_audio_data()
 		elif self.modality == "bimodal":
 			self.data.load_bimodal_data()
+		elif self.modality == "trimodal":
+			self.data.load_trimodal_data()
+		elif self.modality == "video":
+			self.data.load_video_data()
 		else:
 			exit()
 
 		self.train_x = self.data.train_dialogue_features
 		self.val_x = self.data.val_dialogue_features
 		self.test_x = self.data.test_dialogue_features
+		print(self.train_x.shape)
 
 		self.train_y = self.data.train_dialogue_label
 		self.val_y = self.data.val_dialogue_label
@@ -61,7 +66,7 @@ class bc_LSTM:
 			
 
 
-	def calc_test_result(self, pred_label, test_label, test_mask):
+	def calc_test_result(self, pred_label, test_label, test_mask, run):
 		f1_metric = tf.keras.metrics.F1Score()
 		true_label=[]
 		predicted_label=[]
@@ -76,18 +81,44 @@ class bc_LSTM:
 					p_label.append(pred_label[i, j])
 
 		f1_metric.update_state(t_label, p_label)
-		print("Confusion Matrix :")
-		print(confusion_matrix(true_label, predicted_label))
-		print("Classification Report :")
-		print(classification_report(true_label, predicted_label, digits=4))
-		print('Weighted FScore: \n ', precision_recall_fscore_support(true_label, predicted_label, average='weighted'))
-		print('F1 Score: \n', f1_metric.result())
+		run.log("Confusion Matrix :")
+		run.log(confusion_matrix(true_label, predicted_label))
+		run.log("Classification Report :")
+		run.log(classification_report(true_label, predicted_label, digits=4))
+		run.log('Weighted FScore: \n ', precision_recall_fscore_support(true_label, predicted_label, average='weighted'))
+		run.log('F1 Score: \n', f1_metric.result())
 
 
 	def get_audio_model(self):
 
 		# Modality specific hyperparameters
 		self.epochs = 100
+		self.batch_size = 50
+
+		# Modality specific parameters
+		self.embedding_dim = self.train_x.shape[2]
+
+		self.configs = dict(
+			num_classes = self.classes,
+			batch_size = self.batch_size,
+			epochs = self.epochs,
+		)
+
+		print("Creating Model...")
+		
+		inputs = tf.keras.layers.Input(shape=(self.sequence_length, self.embedding_dim), dtype='float32')
+		masked = tf.keras.layers.Masking(mask_value =0)(inputs)
+		lstm = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(300, activation='tanh', return_sequences = True, dropout=0.4))(masked)
+		lstm = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(300, activation='tanh', return_sequences = True, dropout=0.4), name="utter")(lstm)
+		output = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(self.classes,activation='softmax'))(lstm)
+
+		model = tf.keras.models.Model(inputs, output)
+		return model
+	
+	def get_video_model(self):
+
+		# Modality specific hyperparameters
+		self.epochs = 1
 		self.batch_size = 50
 
 		# Modality specific parameters
@@ -219,6 +250,31 @@ class bc_LSTM:
 
 		model = tf.keras.models.Model(inputs, output)
 		return model
+	
+	def get_trimodal_model(self):
+
+		# Modality specific hyperparameters
+		self.epochs = 100
+		self.batch_size = 10
+
+		# Modality specific parameters
+		self.embedding_dim = self.train_x.shape[2]
+
+		self.configs = dict(
+			num_classes = self.classes,
+			batch_size = self.batch_size,
+			epochs = self.epochs,
+		)
+
+		print("Creating Model...")
+		
+		inputs = tf.keras.layers.Input(shape=(self.sequence_length, self.embedding_dim), dtype='float32')
+		masked = tf.keras.layers.Masking(mask_value =0)(inputs)
+		lstm = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(500, activation='tanh', return_sequences = True, dropout=0.4), name="utter")(masked)
+		output = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(self.classes,activation='softmax'))(lstm)
+
+		model = tf.keras.models.Model(inputs, output)
+		return model
 
 
 
@@ -229,29 +285,21 @@ class bc_LSTM:
 
 		if self.modality == "audio":
 			model = self.get_audio_model()
-			model.compile(
-				optimizer='adadelta', 
-				loss='categorical_crossentropy',
-				weighted_metrics=[tf.keras.metrics.CategoricalAccuracy(), 
-			 			# tf.keras.metrics.F1Score(), 
-	   					# tfa.metrics.F1Score(num_classes=self.classes),
-			 			tf.keras.metrics.Recall(), 
-						tf.keras.metrics.Precision()]
-			)
+
 		elif self.modality == "text":
 			model = self.get_text_model()
-			model.compile(
-				optimizer='adadelta', 
-				loss='categorical_crossentropy',
-				weighted_metrics=[tf.keras.metrics.CategoricalAccuracy(), 
-			 			# tf.keras.metrics.F1Score(), 
-	   					# tfa.metrics.F1Score(num_classes=self.classes),
-			 			tf.keras.metrics.Recall(), 
-						tf.keras.metrics.Precision()]
-			)
+
+		elif self.modality == "video":
+			model = self.get_video_model()
+
 		elif self.modality == "bimodal":
 			model = self.get_bimodal_model()
-			model.compile(
+
+		elif self.modality == "trimodal":
+			model = self.get_trimodal_model()
+			
+
+		model.compile(
 				optimizer='adam', 
 				loss='categorical_crossentropy',
 				weighted_metrics=[tf.keras.metrics.CategoricalAccuracy(), 
@@ -259,8 +307,7 @@ class bc_LSTM:
 	   					# tfa.metrics.F1Score(num_classes=self.classes),
 			 			tf.keras.metrics.Recall(), 
 						tf.keras.metrics.Precision()]
-			)
-
+		)
 		run = wandb.init(
 			project = f"MELD_{self.modality}_{self.classification_mode}",
 			config = self.configs
@@ -274,10 +321,9 @@ class bc_LSTM:
 		                shuffle=True, 
 		                callbacks=[wandb.keras.WandbMetricsLogger(log_freq=10), early_stopping, checkpoint],
 		                validation_data=(self.val_x, self.val_y, self.val_mask))
-
+		
+		self.calc_test_result(model.predict(self.test_x), self.test_y, self.test_mask, run)
 		run.finish()
-		self.calc_test_result(model.predict(self.test_x), self.test_y, self.test_mask)
-		model.save(self.PATH)
 		self.test_model()
 
 
@@ -300,7 +346,7 @@ class bc_LSTM:
 			test_emb[ID] = intermediate_output_test[idx]
 		pickle.dump([train_emb, val_emb, test_emb], open(self.OUTPUT_PATH, "wb"))
 
-		self.calc_test_result(model.predict(self.test_x), self.test_y, self.test_mask)
+		# self.calc_test_result(model.predict(self.test_x), self.test_y, self.test_mask)
 		
 
 
@@ -311,7 +357,7 @@ if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
 	parser.required=True
 	parser.add_argument("-classify", help="Set the classifiction to be 'Emotion' or 'Sentiment'", required=True)
-	parser.add_argument("-modality", help="Set the modality to be 'text' or 'audio' or 'bimodal'", required=True)
+	parser.add_argument("-modality", help="Set the modality to be 'text' or 'audio' or 'bimodal' or 'video' or 'trimodal'", required=True)
 	parser.add_argument("-train", default=False, action="store_true" , help="Flag to intiate training")
 	parser.add_argument("-test", default=False, action="store_true" , help="Flag to initiate testing")
 	args = parser.parse_args()
@@ -319,7 +365,7 @@ if __name__ == "__main__":
 	if args.classify.lower() not in ["emotion", "sentiment"]:
 		print("Classification mode hasn't been set properly. Please set the classifiction flag to be: -classify Emotion/Sentiment")
 		exit()
-	if args.modality.lower() not in ["text", "audio", "bimodal"]:
+	if args.modality.lower() not in ["text", "audio", "bimodal", "video", "trimodal"]:
 		print("Modality hasn't been set properly. Please set the modality flag to be: -modality text/audio/bimodal")
 		exit()
 
@@ -335,7 +381,7 @@ if __name__ == "__main__":
 	model = bc_LSTM(args)
 	model.load_data()
 
-	if args.test:
-		model.test_model()
-	else:
-		model.train_model()
+	# if args.test:
+	# 	model.test_model()
+	# else:
+	# 	model.train_model()
