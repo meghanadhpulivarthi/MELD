@@ -36,8 +36,8 @@ class bc_LSTM:
 			self.data.load_audio_data()
 		elif self.modality == "bimodal":
 			self.data.load_bimodal_data()
-		elif self.modality == "trimodal":
-			self.data.load_trimodal_data()
+		elif self.modality == "audio_video_model":
+			self.data.load_audio_video_model()
 		elif self.modality == "video":
 			self.data.load_video_data()
 		else:
@@ -46,7 +46,6 @@ class bc_LSTM:
 		self.train_x = self.data.train_dialogue_features
 		self.val_x = self.data.val_dialogue_features
 		self.test_x = self.data.test_dialogue_features
-		print(self.train_x.shape)
 
 		self.train_y = self.data.train_dialogue_label
 		self.val_y = self.data.val_dialogue_label
@@ -66,7 +65,7 @@ class bc_LSTM:
 			
 
 
-	def calc_test_result(self, pred_label, test_label, test_mask, run):
+	def calc_test_result(self, pred_label, test_label, test_mask):
 		f1_metric = tf.keras.metrics.F1Score()
 		true_label=[]
 		predicted_label=[]
@@ -81,12 +80,12 @@ class bc_LSTM:
 					p_label.append(pred_label[i, j])
 
 		f1_metric.update_state(t_label, p_label)
-		run.log("Confusion Matrix :")
-		run.log(confusion_matrix(true_label, predicted_label))
-		run.log("Classification Report :")
-		run.log(classification_report(true_label, predicted_label, digits=4))
-		run.log('Weighted FScore: \n ', precision_recall_fscore_support(true_label, predicted_label, average='weighted'))
-		run.log('F1 Score: \n', f1_metric.result())
+		print("Confusion Matrix :")
+		print(confusion_matrix(true_label, predicted_label))
+		print("Classification Report :")
+		print(classification_report(true_label, predicted_label, digits=4))
+		print('Weighted FScore: \n ', precision_recall_fscore_support(true_label, predicted_label, average='weighted'))
+		print('F1 Score: \n', f1_metric.result())
 
 
 	def get_audio_model(self):
@@ -346,7 +345,7 @@ class bc_LSTM:
 			test_emb[ID] = intermediate_output_test[idx]
 		pickle.dump([train_emb, val_emb, test_emb], open(self.OUTPUT_PATH, "wb"))
 
-		# self.calc_test_result(model.predict(self.test_x), self.test_y, self.test_mask)
+		self.calc_test_result(model.predict(self.test_x), self.test_y, self.test_mask)
 		
 
 
@@ -381,7 +380,7 @@ if __name__ == "__main__":
 	model = bc_LSTM(args)
 	model.load_data()
 
-	# if args.test:
-	# 	model.test_model()
-	# else:
-	# 	model.train_model()
+	if args.test:
+		model.test_model()
+	else:
+		model.train_model()

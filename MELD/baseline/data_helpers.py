@@ -248,11 +248,11 @@ class Dataloader:
         self.get_masks()        
 
 
-    def load_trimodal_data(self,):
+    def load_audio_video_model(self,):
         
         TEXT_UNIMODAL = "./data/pickles/text_{}.pkl".format(self.MODE.lower())
         AUDIO_UNIMODAL = "./data/pickles/audio_{}.pkl".format(self.MODE.lower())
-        
+
         TRAIN_VIDEO_PATH ="./data/pickles/train.pkl"
         VAL_VIDEO_PATH ="./data/pickles/dev.pkl"
         TEST_VIDEO_PATH ="./data/pickles/test.pkl"
@@ -261,28 +261,31 @@ class Dataloader:
         val_audio_video_emb = pickle.load(open(VAL_VIDEO_PATH,"rb"))
         test_audio_video_emb = pickle.load(open(TEST_VIDEO_PATH, "rb"))
         
-        self.train_video_emb = pd.DataFrame(train_audio_video_emb).loc["video_features"].apply(np.ravel).apply(lambda arr: np.pad(arr, pad_width=(0, 180224-arr.shape[0]))).to_dict()
-        self.val_video_emb = pd.DataFrame(val_audio_video_emb).loc["video_features"].apply(np.ravel).apply(lambda arr: np.pad(arr, pad_width=(0, 180224-arr.shape[0]))).to_dict()
-        self.test_video_emb = pd.DataFrame(test_audio_video_emb).loc["video_features"].apply(np.ravel).apply(lambda arr: np.pad(arr, pad_width=(0, 180224-arr.shape[0]))).to_dict()
+        train_video_x = pd.DataFrame(train_audio_video_emb).loc["video_features"].apply(np.ravel).apply(lambda arr: np.pad(arr, pad_width=(0, 180224-arr.shape[0]))).to_dict()
+        val_video_x = pd.DataFrame(val_audio_video_emb).loc["video_features"].apply(np.ravel).apply(lambda arr: np.pad(arr, pad_width=(0, 180224-arr.shape[0]))).to_dict()
+        test_video_x = pd.DataFrame(test_audio_video_emb).loc["video_features"].apply(np.ravel).apply(lambda arr: np.pad(arr, pad_width=(0, 180224-arr.shape[0]))).to_dict()
 
+        train_audio_x = pd.DataFrame(train_audio_video_emb).loc["audio_features"].apply(np.ravel).apply(lambda arr: np.pad(arr, pad_width=(0, 2816-arr.shape[0]))).to_dict()
+        val_audio_x = pd.DataFrame(val_audio_video_emb).loc["audio_features"].apply(np.ravel).apply(lambda arr: np.pad(arr, pad_width=(0, 2816-arr.shape[0]))).to_dict()
+        test_audio_x = pd.DataFrame(test_audio_video_emb).loc["audio_features"].apply(np.ravel).apply(lambda arr: np.pad(arr, pad_width=(0, 2816-arr.shape[0]))).to_dict()
 
-        self.train_dialogue_ids = self.get_dialogue_ids(self.train_video_emb.keys())
-        self.val_dialogue_ids = self.get_dialogue_ids(self.val_video_emb.keys())
-        self.test_dialogue_ids = self.get_dialogue_ids(self.test_video_emb.keys())
+        self.train_dialogue_ids = self.get_dialogue_ids(self.train_video_x.keys())
+        self.val_dialogue_ids = self.get_dialogue_ids(self.val_video_x.keys())
+        self.test_dialogue_ids = self.get_dialogue_ids(self.test_video_x.keys())
 
-        #Load features
-        train_text_x, val_text_x, test_text_x = pickle.load(open(TEXT_UNIMODAL, "rb"), encoding='latin1')
-        train_audio_x, val_audio_x, test_audio_x = pickle.load(open(AUDIO_UNIMODAL, "rb"), encoding='latin1')
+        # #Load features
+        # train_text_x, val_text_x, test_text_x = pickle.load(open(TEXT_UNIMODAL, "rb"), encoding='latin1')
+        # train_audio_x, val_audio_x, test_audio_x = pickle.load(open(AUDIO_UNIMODAL, "rb"), encoding='latin1')
 
-        def concatenate_fusion(ID, text, audio, video):
+        def concatenate_fusion(ID, audio, video):
             trimodal=[]
             for vid, utts in ID.items():
-                trimodal.append(np.concatenate( (text[vid], audio[vid], video[vid]) , axis=1))
+                trimodal.append(np.concatenate( (audio[vid], video[vid]) , axis=1))
             return np.array(trimodal)
 
-        self.train_dialogue_features = concatenate_fusion(self.train_dialogue_ids, train_text_x, train_audio_x, train_video_x)
-        self.val_dialogue_features = concatenate_fusion(self.val_dialogue_ids, val_text_x, val_audio_x, val_video_x)
-        self.test_dialogue_features = concatenate_fusion(self.test_dialogue_ids, test_text_x, test_audio_x, test_video_x)
+        self.train_dialogue_features = concatenate_fusion(self.train_dialogue_ids, train_audio_x, train_video_x)
+        self.val_dialogue_features = concatenate_fusion(self.val_dialogue_ids, val_audio_x, val_video_x)
+        self.test_dialogue_features = concatenate_fusion(self.test_dialogue_ids, test_audio_x, test_video_x)
 
         self.get_dialogue_lengths()
         self.get_dialogue_labels()
